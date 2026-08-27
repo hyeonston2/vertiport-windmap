@@ -141,7 +141,7 @@ let pts=null, posArr=null, boxCol=null, boxDS=null, isBox=false;
 let cache=null;   // Float32Array [risk, um, wg] x N
 
 // ── 로드 ──────────────────────────────────────
-fetch("data/gg_raw.json").then(r=>r.json()).then(d=>{
+fetch("gg_raw.json").then(r=>r.json()).then(d=>{
   D = d;
   if (d.thresholds) TH = d.thresholds;
   uref = d.base;
