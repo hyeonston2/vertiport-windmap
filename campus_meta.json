@@ -1,0 +1,40 @@
+{
+ "nx": 64,
+ "ny": 64,
+ "nz": 12,
+ "nd": 8,
+ "dx": 5.0,
+ "base": 6.0,
+ "scale": 0.1,
+ "lon_min": 126.91643710609712,
+ "lat_min": 37.38910852694686,
+ "lon_max": 126.91982190917186,
+ "lat_max": 37.391813938221006,
+ "center": {
+  "lon": 126.91812950763449,
+  "lat": 37.39046123258393
+ },
+ "ground": 101.766,
+ "dirs": [
+  0,
+  45,
+  90,
+  135,
+  180,
+  225,
+  270,
+  315
+ ],
+ "layout": [
+  "wind_speed uint8 (D,Z,Y,X)",
+  "w_gust uint8 (D,Z,Y,X)",
+  "building uint8 (Z,Y,X)"
+ ],
+ "thresholds": {
+  "u_green": 7.72,
+  "u_yellow": 12.86,
+  "w_green": 4.0,
+  "w_yellow": 6.0,
+  "gust_red": 18.0
+ }
+}
