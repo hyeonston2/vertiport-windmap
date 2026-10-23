@@ -1,0 +1,45 @@
+{
+ "base": 6.0,
+ "dirs": [
+  0,
+  45,
+  90,
+  135,
+  180,
+  225,
+  270,
+  315
+ ],
+ "nz": 12,
+ "dz": 5.0,
+ "patch": 300.0,
+ "thresholds": {
+  "u_caution": 7.71666,
+  "u_nogo": 12.8611,
+  "sw_caution": 1.5,
+  "sw_nogo": 2.3,
+  "shear_caution": 5.14444,
+  "shear_nogo": 7.71666,
+  "gust_nogo": 18.00554,
+  "gust_k": 6.000571210967251
+ },
+ "n": 14787,
+ "scales": {
+  "ux": 0.1,
+  "sx": 0.01,
+  "hx": 0.05,
+  "cu": 0.1,
+  "nu": 0.1
+ },
+ "order": [
+  "lon f32",
+  "lat f32",
+  "pid i32",
+  "nf u16 (N,Z)",
+  "ux u8 (N,D,Z)",
+  "sx u8 (N,D,Z)",
+  "hx u8 (N,D,Z)",
+  "cu u8 (N,D,Z)",
+  "nu u8 (N,D,Z)"
+ ]
+}

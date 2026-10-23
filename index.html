@@ -201,8 +201,38 @@ let C=null, CV=null, campIdx=-1, campPos=null, campFrame=null, campPrim=null, ca
 let campStat=null;
 
 // ── 로드 ──────────────────────────────────────
+async function loadGG(){
+  const prog = document.getElementById("lprog");
+  const m = await fetch("data/gg_v3_meta.json").then(r=>{ if(!r.ok) throw new Error("gg_v3_meta.json "+r.status); return r.json(); });
+  const res = await fetch("data/gg_v3.bin");
+  if (!res.ok) throw new Error("gg_v3.bin "+res.status);
+  const tot = +res.headers.get("Content-Length") || 0, rd = res.body.getReader(), chunks = []; let got = 0;
+  for(;;){ const {done, value} = await rd.read(); if (done) break; chunks.push(value); got += value.length;
+    prog.textContent = tot ? `바람 자료 ${(got/1e6).toFixed(1)} / ${(tot/1e6).toFixed(1)} MB` : `바람 자료 ${(got/1e6).toFixed(1)} MB`; }
+  const buf = new Uint8Array(got); let o = 0; for (const c of chunks){ buf.set(c, o); o += c.length; }
+  const n = m.n, nd = m.dirs.length, nz = m.nz, b = buf.buffer;
+  const lon = new Float32Array(b, 0, n), lat = new Float32Array(b, 4*n, n), pid = new Int32Array(b, 8*n, n);
+  const nf = new Uint16Array(b, 12*n, n*nz);
+  let off = 12*n + 2*n*nz; const U8 = {};
+  for (const k of ["ux","sx","hx","cu","nu"]){ U8[k] = new Uint8Array(b, off, n*nd*nz); off += n*nd*nz; }
+  const p = new Array(n);
+  for (let i=0; i<n; i++){
+    const q = {i:pid[i], o:lon[i], a:lat[i], nf:Array.from(nf.subarray(i*nz, (i+1)*nz))};
+    for (const k of ["ux","sx","hx","cu","nu"]){
+      const sc = m.scales[k], A = U8[k], rows = [];
+      for (let d=0; d<nd; d++){
+        const row = new Array(nz), base = (i*nd+d)*nz;
+        for (let z=0; z<nz; z++){ const v = A[base+z]; row[z] = (k==="cu"||k==="nu") && v===255 ? 99 : v*sc; }
+        rows.push(row);
+      }
+      q[k] = rows;
+    }
+    p[i] = q;
+  }
+  return {...m, p};
+}
 Promise.all([
-  fetch("data/gg_raw_v3.json").then(r=>{ if(!r.ok) throw new Error("gg_raw_v3.json "+r.status); return r.json(); }),
+  loadGG(),
   fetch("data/campus_meta_v3.json").then(r=>r.ok ? r.json() : null).catch(()=>null),
   fetch("data/campus_voxel_v3.bin").then(r=>r.ok ? r.arrayBuffer() : null).catch(()=>null)
 ]).then(([d, cm, cb])=>{
