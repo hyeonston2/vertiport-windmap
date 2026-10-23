@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>버티포트 바람 위험지도 — 경기도</title>
+<title>버티포트 바람 위험지도 — 경기도 3D</title>
 <script src="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Cesium.js"></script>
 <link href="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
 <style>
@@ -29,30 +29,38 @@
     margin-top:9px;cursor:pointer}
   #legend{margin-top:15px;padding-top:13px;border-top:1px solid #35383c}
   #legend .t{font-size:10.5px;color:#9aa0a6;margin-bottom:7px}
-  #legend div.i{display:flex;align-items:center;gap:7px;margin:3px 0;font-size:11.5px}
-  .sw{width:14px;height:11px;border-radius:2px;flex:none}
+  #legend div.i{display:flex;align-items:flex-start;gap:7px;margin:4px 0;font-size:11.5px}
+  .sw{width:14px;height:11px;border-radius:2px;flex:none;margin-top:3px}
   #stat{margin-top:14px;padding-top:12px;border-top:1px solid #35383c;
     font-size:11.5px;color:#9aa0a6}
   #stat b{color:#e8eaed}
   #stat .big{font-size:19px;color:#8ab4f8;font-weight:650;
     font-variant-numeric:tabular-nums}
+  .zgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px}
+  .zgrid button{padding:4px 0;font-size:10.5px;border:1px solid #3c4043;background:#26282c;color:#9aa0a6;border-radius:5px;cursor:pointer;font-variant-numeric:tabular-nums}
+  .zgrid button.on{background:#8ab4f8;color:#17181a;border-color:#8ab4f8;font-weight:650}
+  .zbtn{display:flex;gap:4px;margin-top:5px}
+  .zbtn button{flex:1;padding:4px 0;font-size:10.5px;border:1px solid #3c4043;background:#1d1f22;color:#bdc1c6;border-radius:5px;cursor:pointer}
   .note{font-size:10px;color:#5f6368;margin-top:13px;line-height:1.45}
   #mode{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);
     padding:7px 15px;background:rgba(18,20,24,.85);color:#9aa0a6;
-    border-radius:18px;font-size:11.5px;z-index:10}
+    border-radius:18px;font-size:11.5px;z-index:10;white-space:nowrap}
   #mode b{color:#8ab4f8}
   #loading{position:absolute;inset:0;display:flex;flex-direction:column;
     gap:11px;align-items:center;justify-content:center;background:#0c0d0f;
     color:#8ab4f8;font-size:14px;z-index:100}
-  #pop{position:absolute;top:12px;right:12px;width:250px;padding:14px 16px;
+  #pop{position:absolute;top:12px;right:12px;width:290px;padding:14px 16px;
     background:rgba(18,20,24,.92);color:#e8eaed;border-radius:11px;
     font-size:12px;z-index:10;display:none;backdrop-filter:blur(10px);
     max-height:calc(100vh - 24px);overflow-y:auto}
   #pop h3{margin:0 0 9px;font-size:13px;font-weight:650}
   #pop table{width:100%;border-collapse:collapse;font-size:11px}
   #pop td{padding:2.5px 0;color:#bdc1c6}
-  #pop td:last-child{text-align:right;color:#e8eaed;font-variant-numeric:tabular-nums}
+  #pop td.r{text-align:right;color:#e8eaed;font-variant-numeric:tabular-nums}
+  #pop th{font-weight:500;color:#80868b;text-align:right;font-size:10px;padding-bottom:3px}
+  #pop th:first-child{text-align:left}
   #pop .x{position:absolute;top:9px;right:12px;cursor:pointer;color:#9aa0a6}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
 </style>
 </head>
 <body>
@@ -62,7 +70,7 @@
 
 <div id="panel">
   <h1>버티포트 바람 위험지도</h1>
-  <div class="sub">경기도 · CFD 학습 대리모델 · 5 m 격자</div>
+  <div class="sub">경기도 · CFD 학습 대리모델 · 층별 3D (0~60 m)</div>
 
   <div class="row">
     <label>기준풍속 <span class="val" id="vU">6.0 m/s</span></label>
@@ -77,8 +85,15 @@
   </div>
 
   <div class="row">
-    <label>고도 <span class="val" id="vZ">전체</span></label>
-    <input type="range" id="rZ" min="-1" max="11" step="1" value="-1">
+    <label>고도 (5 m 층, 여러 개 선택) <span class="val" id="vZ">12층 모두</span></label>
+    <div class="zgrid" id="zg"></div>
+    <div class="zbtn"><button id="zAll">모두</button><button id="zNone">해제</button>
+      <button id="zLow">0~30 m</button><button id="zHigh">30~60 m</button></div>
+  </div>
+
+  <div class="row">
+    <label>높이 과장 (광역 층) <span class="val" id="vE">× 3</span></label>
+    <input type="range" id="rE" min="1" max="5" step="1" value="3">
   </div>
 
   <div class="row">
@@ -86,47 +101,71 @@
     <div class="seg" id="segM">
       <button data-m="risk" class="on">위험등급</button>
       <button data-m="u">풍속</button>
-      <button data-m="g">돌풍</button>
+      <button data-m="sw">σw</button>
+      <button data-m="sh">윈드시어</button>
     </div>
+    <label class="chk"><input type="checkbox" id="cGo" checked> 운항 가능 층·칸도 표시 (옅게)</label>
+    <label class="chk"><input type="checkbox" id="cOsm"> 3D 건물 (OSM) 표시</label>
+    <label class="chk"><input type="checkbox" id="cBld" checked> 캠퍼스 건물 칸 표시</label>
   </div>
 
   <div id="legend"></div>
   <div id="stat"></div>
   <div class="note">
-    RANS 학습 3D U-Net 예측. 중립 대기안정도, LOD1 형상.
-    임계값은 NASA/AvMet UAM 기준.
-    돌풍은 peak factor 3.0 적용 추정값.
+    RANS 학습 3D U-Net 예측. 기준풍속 6 m/s 결과를 풍속비로 환산. 중립 대기안정도, LOD1 형상.
+    판정: 수평풍속 15/25 kt, 연직 풍속 표준편차 σw 1.5/2.3 m/s, 15 m 윈드시어 10/15 kt,
+    보조 수평 돌풍(U + 3·1.05√k) 35 kt 초과 시 운항 불가 (Ng, 2022 참고). 연구용 판정이며 운항 기준이 아님.
+    광역 층은 구역별 층 안의 가장 불리한 칸 기준.
   </div>
 </div>
 
 <div id="pop"><span class="x" onclick="document.getElementById('pop').style.display='none'">✕</span>
   <h3 id="pt"></h3><table id="pb"></table></div>
 
-<div id="mode">시점 <b id="mtxt">광역</b> · 확대하면 입체로 전환</div>
+<div id="mode">시점 <b id="mtxt">광역</b> · 확대하면 층별 입체, 캠퍼스는 5 m 칸</div>
 
 <script>
-Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6ImJ3Y205NGNodW9aTmdXMWwiLCJqdGkiOiI1YWRiOGJkMS1kZjhkLTRlMzEtODZkYy1mMmU5YTE2ODQ1MTEiLCJpZCI6MjQ5Mzk0LCJzdWIiOiJoeWVvbnNlb2siLCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoidmVydGlwb3J0LXdlYiIsImlhdCI6MTc4NzgxOTA1Mn0.d67bBhylYb9Y1imdjfZBbiUyk5JrW59AiF1lSALyX1k";
+const ION_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6Ikl4VnMyZ01UaE9vZHhmREIiLCJqdGkiOiJmNmEzNjA4Yy01ZmYzLTRhMWItODI0Yi02ZTg4M2YyNGRlZjgiLCJpZCI6MjQ5Mzk0LCJzdWIiOiJoeWVvbnNlb2siLCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoid2luZG1hcCIsImlhdCI6MTc5MjcyOTU4Mn0.Ej7d3LK2-OMNVlarMzchR7R7xbq2SD1uuKrCtkQCv4o";   // ← Cesium ion 토큰
+Cesium.Ion.defaultAccessToken = ION_TOKEN;
 
 const viewer = new Cesium.Viewer("cesium", {
   terrain: Cesium.Terrain.fromWorldTerrain(),
+  baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({url:"https://tile.openstreetmap.org/"})),
   baseLayerPicker:false, geocoder:false, homeButton:false, sceneModePicker:false,
   navigationHelpButton:false, animation:false, timeline:false,
   infoBox:false, selectionIndicator:false, fullscreenButton:false,
   requestRenderMode:true, maximumRenderTimeChange:Infinity
 });
 const scene = viewer.scene;
-scene.globe.depthTestAgainstTerrain = true;
+scene.globe.depthTestAgainstTerrain = false;   // 지형에 가려 상자가 사라지지 않게
+scene.globe.maximumScreenSpaceError = 4;   // 지형 타일을 덜 받아 부하 줄임
+scene.globe.tileCacheSize = 300;
+let osm = null;
+Cesium.createOsmBuildingsAsync().then(t=>{
+  osm = scene.primitives.add(t);
+  osm.show = document.getElementById("cOsm").checked;
+  scene.requestRender();
+}).catch(e=>{ console.warn("OSM 건물 로드 실패", e);
+  const c = document.getElementById("cOsm"); c.disabled = true;
+  c.parentElement.innerHTML += ' <span style="color:#f28b82;font-size:10.5px">(불러오기 실패: Cesium ion 토큰 확인)</span>'; });
 
 // ── 상수 ──────────────────────────────────────
-let TH = {u_green:7.72, u_yellow:12.86, w_green:4.0, w_yellow:6.0, gust_red:18.0};
-const PF_U = 1.25;
+const KT = 0.514444;
+let TH = {u_caution:15*KT, u_nogo:25*KT, sw_caution:1.5, sw_nogo:2.3,
+          shear_caution:10*KT, shear_nogo:15*KT, gust_nogo:35*KT, gust_k:3*1.0505/0.5252};
 const RISK_C = [[46,125,50],[249,168,37],[198,40,40]];
+const RISK_N = ["go","caution","no-go"];
 const U_TBL = [[26,35,126],[21,101,192],[38,198,218],[255,213,79],[251,140,0],[198,40,40]];
-const G_TBL = [[13,71,161],[2,136,209],[77,208,225],[255,235,59],[245,124,0],[183,28,28]];
+const S_TBL = [[13,71,161],[2,136,209],[77,208,225],[255,235,59],[245,124,0],[183,28,28]];
+const H_TBL = [[49,27,146],[94,53,177],[171,71,188],[240,98,146],[255,138,101],[198,40,40]];
+const MODES = {
+  u:  {lab:"최대 수평풍속 [m/s]",       hi:20, tbl:U_TBL},
+  sw: {lab:"최대 σw [m/s]",             hi:3,  tbl:S_TBL},
+  sh: {lab:"최대 윈드시어 (15 m) [m/s]", hi:10, tbl:H_TBL}};
 
-// LOD 전환 고도 [m]
-const LOD_BOX = 25000;    // 이보다 가까우면 박스
-const BOX_MAX = 4000;     // 박스로 그릴 최대 개수
+const LOD_BOX = 20000;   // 이보다 가까우면 층별 입체
+const BOX_MAX = 6000;    // 한 번에 그릴 최대 층 상자 수
+const CAMP_D  = 4000;    // 캠퍼스와 이 거리 안이면 5 m 칸 표시
 
 function ramp(v, lo, hi, tbl){
   const t = Math.max(0, Math.min(1, (v-lo)/(hi-lo)));
@@ -134,29 +173,65 @@ function ramp(v, lo, hi, tbl){
   const a = tbl[i], b = tbl[i+1];
   return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f];
 }
+function classify(u, sw, sh){
+  if (u > TH.u_nogo || sw > TH.sw_nogo || sh > TH.shear_nogo ||
+      u + TH.gust_k*sw > TH.gust_nogo) return 2;
+  if (u > TH.u_caution || sw > TH.sw_caution || sh > TH.shear_caution) return 1;
+  return 0;
+}
+function rgba(r, u, sw, sh){
+  if (mode==="risk"){
+    const c = RISK_C[r];
+    return [c[0], c[1], c[2], r===0 ? 0.16 : (r===1 ? 0.75 : 0.92)];
+  }
+  const M = MODES[mode], v = mode==="u" ? u : (mode==="sw" ? sw : sh);
+  const c = ramp(v, 0, M.hi, M.tbl);
+  return [c[0], c[1], c[2], 0.85];
+}
+const toColor = a => Cesium.Color.fromBytes(a[0]|0, a[1]|0, a[2]|0, (a[3]*255)|0);
+const hLab = z => ((z+0.5)*D.dz).toFixed(1)+" m";
 
 // ── 상태 ──────────────────────────────────────
-let D=null, uref=6, dirIdx=0, allDir=true, zIdx=-1, mode="risk";
-let pts=null, posArr=null, boxCol=null, boxDS=null, isBox=false;
-let cache=null;   // Float32Array [risk, um, wg] x N
+let D=null, N=0, NZ=0;
+let uref=6, dirIdx=0, allDir=true, zSel=[], mode="risk", exag=3, showGo=true, showBld=true;
+let pts=null, isBox=false;
+let PR, PU, PS, PH;     // 구역별 (선택한 층 기준)
+let LR, LU, LS, LH;     // 구역·층별
+let C=null, CV=null, campIdx=-1, campPos=null, campFrame=null, campPrim=null, campOn=false;
+let campStat=null;
 
 // ── 로드 ──────────────────────────────────────
-fetch("gg_raw.json").then(r=>r.json()).then(d=>{
-  D = d;
-  if (d.thresholds) TH = d.thresholds;
+Promise.all([
+  fetch("data/gg_raw_v3.json").then(r=>{ if(!r.ok) throw new Error("gg_raw_v3.json "+r.status); return r.json(); }),
+  fetch("data/campus_meta_v3.json").then(r=>r.ok ? r.json() : null).catch(()=>null),
+  fetch("data/campus_voxel_v3.bin").then(r=>r.ok ? r.arrayBuffer() : null).catch(()=>null)
+]).then(([d, cm, cb])=>{
+  D = d; N = d.p.length; NZ = d.nz;
+  if (d.thresholds) Object.assign(TH, d.thresholds);
   uref = d.base;
   document.getElementById("rU").value = d.base;
   document.getElementById("rD").max = d.dirs.length-1;
-  document.getElementById("rZ").max = d.nz-1;
-  document.getElementById("lprog").textContent =
-    `${d.p.length.toLocaleString()} 패치 준비 중…`;
+  zSel = new Array(d.nz).fill(true);
+  buildZGrid();
+  document.getElementById("lprog").textContent = `${N.toLocaleString()} 구역 준비 중…`;
+  PR = new Uint8Array(N); PU = new Float32Array(N); PS = new Float32Array(N); PH = new Float32Array(N);
+  LR = new Uint8Array(N*NZ); LU = new Float32Array(N*NZ); LS = new Float32Array(N*NZ); LH = new Float32Array(N*NZ);
+
+  if (cm && cb){
+    C = cm;
+    const n = cm.nd*cm.nz*cm.ny*cm.nx, b = new Uint8Array(cb);
+    CV = {u:b.subarray(0,n), s:b.subarray(n,2*n), h:b.subarray(2*n,3*n),
+          o:b.subarray(3*n, 3*n + cm.nz*cm.ny*cm.nx)};
+    campPos = Cesium.Cartesian3.fromDegrees(C.center.lon, C.center.lat, 100);
+    let bd = 1e9;
+    D.p.forEach((p,i)=>{ const dd = Math.hypot(p.o-C.center.lon, p.a-C.center.lat);
+                          if (dd < bd){ bd = dd; campIdx = i; } });
+  }
 
   setTimeout(()=>{
     buildPoints();
-    boxDS = new Cesium.CustomDataSource("box");
-    viewer.dataSources.add(boxDS);
-    compute(); paint();
-    document.getElementById("loading").style.display="none";
+    refresh();
+    document.getElementById("loading").style.display = "none";
     viewer.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(127.15, 36.95, 145000),
       orientation:{heading:0, pitch:Cesium.Math.toRadians(-60), roll:0}});
@@ -166,148 +241,259 @@ fetch("gg_raw.json").then(r=>r.json()).then(d=>{
     "데이터를 불러오지 못했습니다<br><span style='font-size:11px;color:#5f6368'>"+e+"</span>";
 });
 
-// ── 포인트 프리미티브 (광역, 빠름) ────────────
+// ── 포인트 (광역) ─────────────────────────────
 function buildPoints(){
   pts = scene.primitives.add(new Cesium.PointPrimitiveCollection({blendOption:
         Cesium.BlendOption.OPAQUE_AND_TRANSLUCENT}));
-  posArr = new Array(D.p.length);
   D.p.forEach((p,i)=>{
-    posArr[i] = Cesium.Cartesian3.fromDegrees(p.o, p.a, 30);
-    pts.add({ position: posArr[i], pixelSize: 5,
+    pts.add({ position: Cesium.Cartesian3.fromDegrees(p.o, p.a, 30), pixelSize: 5,
               color: Cesium.Color.GRAY, id:{idx:i} });
   });
-  cache = new Float32Array(D.p.length * 3);
 }
 
-// ── 값 계산 (조작 시 1회) ─────────────────────
+// ── 값 계산 ───────────────────────────────────
+// cu, nu: 그 층에서 가장 먼저 주의/불가가 되는 기준풍속 (99 = 해당 없음)
 function compute(){
-  const s = uref / D.base;
-  const nd = D.dirs.length;
+  const s = uref / D.base, nd = D.dirs.length;
   const ds = allDir ? [...Array(nd).keys()] : [dirIdx];
-  const zs = zIdx < 0 ? [...Array(D.nz).keys()] : [zIdx];
-  for (let i=0; i<D.p.length; i++){
+  for (let i=0; i<N; i++){
     const p = D.p[i];
-    let umMax=0, wgMax=0, risk=0;
-    for (const d of ds) for (const z of zs){
-      const um = p.ux[d][z]*s, wg = p.wg[d][z]*s;
-      let r = 0;
-      if (um > TH.u_green  || wg > TH.w_green ) r = 1;
-      if (um > TH.u_yellow || wg > TH.w_yellow || um*PF_U > TH.gust_red) r = 2;
-      if (r > risk) risk = r;
-      if (um > umMax) umMax = um;
-      if (wg > wgMax) wgMax = wg;
+    let wr=0, wu=0, ws=0, wh=0;
+    for (let z=0; z<NZ; z++){
+      const k = i*NZ+z;
+      if (!p.nf[z]){ LR[k]=255; LU[k]=LS[k]=LH[k]=0; continue; }
+      let r=0, u=0, sw=0, sh=0;
+      for (const d of ds){
+        const rr = uref > p.nu[d][z] ? 2 : (uref > p.cu[d][z] ? 1 : 0);
+        if (rr > r) r = rr;
+        u  = Math.max(u,  p.ux[d][z]*s);
+        sw = Math.max(sw, p.sx[d][z]*s);
+        sh = Math.max(sh, p.hx[d][z]*s);
+      }
+      LR[k]=r; LU[k]=u; LS[k]=sw; LH[k]=sh;
+      if (zSel[z]){
+        if (r>wr) wr=r; if (u>wu) wu=u; if (sw>ws) ws=sw; if (sh>wh) wh=sh;
+      }
     }
-    cache[i*3] = risk; cache[i*3+1] = umMax; cache[i*3+2] = wgMax;
+    PR[i]=wr; PU[i]=wu; PS[i]=ws; PH[i]=wh;
   }
-}
-
-function colorOf(i){
-  const r = cache[i*3], um = cache[i*3+1], wg = cache[i*3+2];
-  if (mode==="risk"){
-    const c = RISK_C[r];
-    return [c[0], c[1], c[2], r===0 ? 0.45 : (r===1 ? 0.75 : 0.92)];
-  }
-  const c = mode==="u" ? ramp(um,0,20,U_TBL) : ramp(wg,0,12,G_TBL);
-  return [c[0], c[1], c[2], 0.85];
 }
 
 // ── 색칠 + 통계 ───────────────────────────────
 function paint(){
-  let c0=0,c1=0,c2=0,umx=0,gmx=0;
-  for (let i=0; i<D.p.length; i++){
-    const [r,g,b,a] = colorOf(i);
-    pts.get(i).color = Cesium.Color.fromBytes(r|0, g|0, b|0, (a*255)|0);
-    const rk = cache[i*3];
-    if (rk===0) c0++; else if (rk===1) c1++; else c2++;
-    if (cache[i*3+1] > umx) umx = cache[i*3+1];
-    if (cache[i*3+2] > gmx) gmx = cache[i*3+2];
+  let c0=0,c1=0,c2=0, umx=0, smx=0, hmx=0;
+  for (let i=0; i<N; i++){
+    pts.get(i).color = toColor(rgba(PR[i], PU[i], PS[i], PH[i]));
+    if (PR[i]===0) c0++; else if (PR[i]===1) c1++; else c2++;
+    umx = Math.max(umx, PU[i]); smx = Math.max(smx, PS[i]); hmx = Math.max(hmx, PH[i]);
   }
   if (isBox) rebuildBoxes();
+  buildCampus();
 
-  const tot = D.p.length;
+  let camp = "";
+  if (campOn && campStat){
+    const [n0,n1,n2] = campStat, t = n0+n1+n2;
+    camp = `<div style="margin-top:8px">캠퍼스 5 m 칸 &nbsp;주의 <b>${(n1/t*100).toFixed(1)}%</b>
+            &nbsp;불가 <b>${(n2/t*100).toFixed(1)}%</b></div>`;
+  }
   document.getElementById("stat").innerHTML =
-    `<div class="big">${(c0/tot*100).toFixed(1)}%</div>
-     <div style="margin-bottom:8px">운항 가능 지역</div>
+    `<div class="big">${(c0/N*100).toFixed(1)}%</div>
+     <div style="margin-bottom:8px">운항 가능 구역 (선택한 층이 모두 go)</div>
      <b>go</b> ${c0.toLocaleString()} &nbsp;
      <b>caution</b> ${c1.toLocaleString()} &nbsp;
      <b>no-go</b> ${c2.toLocaleString()}<br>
-     최대 풍속 <b>${umx.toFixed(1)}</b> m/s &nbsp;
-     최대 돌풍 <b>${gmx.toFixed(1)}</b> m/s`;
+     최대 풍속 <b>${umx.toFixed(1)}</b> · σw <b>${smx.toFixed(2)}</b> · 시어 <b>${hmx.toFixed(1)}</b> m/s` + camp;
   legend();
   scene.requestRender();
 }
 
 function legend(){
   const lg = document.getElementById("legend");
+  const f = v => v.toFixed(1);
   if (mode==="risk"){
-    lg.innerHTML = `<div class="t">운항 판정 (NASA/AvMet)</div>` +
-      [["go", `풍속 &lt; ${TH.u_green} · 돌풍 &lt; ${TH.w_green}`],
-       ["caution", `${TH.u_green}~${TH.u_yellow} · ${TH.w_green}~${TH.w_yellow}`],
-       ["no-go", `&gt; ${TH.u_yellow} · &gt; ${TH.w_yellow}`]]
-      .map((x,i)=>`<div class="i"><span class="sw" style="background:rgb(${RISK_C[i].join(",")})"></span>
-        <span><b style="color:#e8eaed">${x[0]}</b>
+    const rows = [
+      ["go", "아래 기준을 모두 넘지 않음"],
+      ["caution", `풍속 &gt; 15 kt(${f(TH.u_caution)}) · σw &gt; ${TH.sw_caution} · 시어 &gt; 10 kt(${f(TH.shear_caution)})`],
+      ["no-go", `풍속 &gt; 25 kt(${f(TH.u_nogo)}) · σw &gt; ${TH.sw_nogo} · 시어 &gt; 15 kt(${f(TH.shear_nogo)}) · 수평 돌풍 &gt; 35 kt(${f(TH.gust_nogo)})`]];
+    lg.innerHTML = `<div class="t">운항 판정 [m/s] (σw·윈드시어 기준)</div>` +
+      rows.map((x,i)=>`<div class="i"><span class="sw" style="background:rgb(${RISK_C[i].join(",")})"></span>
+        <span><b style="color:#e8eaed">${x[0]}</b><br>
         <span style="color:#80868b;font-size:10.5px">${x[1]}</span></span></div>`).join("");
   } else {
-    const hi = mode==="u" ? 20 : 12, tbl = mode==="u" ? U_TBL : G_TBL;
-    lg.innerHTML = `<div class="t">${mode==="u"?"최대 수평풍속":"최대 수직돌풍"} [m/s]</div>` +
-      tbl.map((c,i)=>`<div class="i"><span class="sw" style="background:rgb(${c.join(",")})"></span>
-        ${(i*hi/(tbl.length-1)).toFixed(0)}</div>`).join("");
+    const M = MODES[mode];
+    lg.innerHTML = `<div class="t">${M.lab}</div>` +
+      M.tbl.map((c,i)=>`<div class="i"><span class="sw" style="background:rgb(${c.join(",")})"></span>
+        ${(i*M.hi/(M.tbl.length-1)).toFixed(mode==="sw"?1:0)}</div>`).join("");
   }
 }
 
-// ── 박스 (근접, 입체) ─────────────────────────
-function rebuildBoxes(){
-  boxDS.entities.removeAll();
+// ── 광역 층 상자 (근접) ───────────────────────
+// 구역별 땅 높이는 한 번만 구해 저장 (상자를 땅에 붙이는 계산을 매번 하지 않도록)
+let GH = null, boxPrim = null, boxJob = 0;
+async function ensureHeights(idxs){
+  if (!GH) GH = new Float32Array(N).fill(NaN);
+  const need = idxs.filter(i=>isNaN(GH[i]));
+  if (!need.length) return;
+  const tp = viewer.terrainProvider;
+  if (tp instanceof Cesium.EllipsoidTerrainProvider){ need.forEach(i=>GH[i]=0); return; }
+  const cs = need.map(i=>Cesium.Cartographic.fromDegrees(D.p[i].o, D.p[i].a));
+  try { await Cesium.sampleTerrain(tp, 12, cs); } catch(e){ console.warn("지형 높이 실패", e); }
+  need.forEach((i,j)=>{ GH[i] = cs[j].height || 0; });
+}
+
+async function rebuildBoxes(){
+  const job = ++boxJob;
   const cc = viewer.camera.positionCartographic;
-  const clo = Cesium.Math.toDegrees(cc.longitude);
-  const cla = Cesium.Math.toDegrees(cc.latitude);
+  lastBox = {lo:cc.longitude, la:cc.latitude, h:cc.height};
+  // 카메라 바로 아래가 아니라 화면 가운데가 보는 곳 기준
+  const cv = scene.canvas, mid = viewer.camera.pickEllipsoid(new Cesium.Cartesian2(cv.clientWidth/2, cv.clientHeight/2));
+  const vc = mid ? Cesium.Cartographic.fromCartesian(mid) : cc;
+  const clo = Cesium.Math.toDegrees(vc.longitude), cla = Cesium.Math.toDegrees(vc.latitude);
   const rad = Math.max(0.004, Math.min(0.35, cc.height / 1000 * 0.012));
   const cand = [];
-  for (let i=0; i<D.p.length; i++){
+  for (let i=0; i<N; i++){
     const p = D.p[i];
-    if (Math.abs(p.o-clo) < rad*1.3 && Math.abs(p.a-cla) < rad){
+    if (Math.abs(p.o-clo) < rad*1.3 && Math.abs(p.a-cla) < rad)
       cand.push([Math.hypot(p.o-clo, p.a-cla), i]);
-    }
   }
   cand.sort((a,b)=>a[0]-b[0]);
-  const use = cand.slice(0, BOX_MAX);
-  const h  = zIdx < 0 ? D.nz*D.dz : D.dz;
-  const zc = zIdx < 0 ? h/2 : (zIdx+0.5)*D.dz;
-  use.forEach(([,i])=>{
+  const use = cand.slice(0, Math.ceil(BOX_MAX/2)).map(c=>c[1]);
+  await ensureHeights(use);
+  if (job !== boxJob || !isBox) return;          // 그사이 새 요청이 오면 버림
+
+  const h = D.dz*exag, w = D.patch - 8;
+  const geom = Cesium.BoxGeometry.fromDimensions({
+    vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
+    dimensions: new Cesium.Cartesian3(w, w, h*0.9)});
+  const insts = [];
+  for (const i of use){
+    if (insts.length >= BOX_MAX) break;
+    if (campOn && i === campIdx) continue;
     const p = D.p[i];
-    const [r,g,b,a] = colorOf(i);
-    boxDS.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(p.o, p.a, zc),
-      box:{ dimensions:new Cesium.Cartesian3(D.patch, D.patch, h),
-            material: Cesium.Color.fromBytes(r|0,g|0,b|0,(a*255)|0),
-            outline:false,
-            heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND },
-      properties:{ idx:i }
+    for (let z=0; z<NZ; z++){
+      if (!zSel[z]) continue;
+      const k = i*NZ+z, r = LR[k];
+      if (r === 255) continue;
+      if (mode==="risk" && r===0 && !showGo) continue;
+      insts.push(new Cesium.GeometryInstance({ geometry: geom,
+        modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+          Cesium.Cartesian3.fromDegrees(p.o, p.a, GH[i] + (z+0.5)*h)),
+        id:{idx:i, z:z},
+        attributes:{ color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+          toColor(rgba(r, LU[k], LS[k], LH[k]))) }}));
+    }
+  }
+  // 새 상자를 다 만든 뒤에 옛 상자를 지움 → 깜빡임 없음
+  const old = boxPrim;
+  boxPrim = insts.length ? scene.primitives.add(new Cesium.Primitive({
+    geometryInstances: insts, asynchronous: false,
+    appearance: new Cesium.PerInstanceColorAppearance({translucent:true, closed:true})})) : null;
+  if (old) scene.primitives.remove(old);
+  document.getElementById("mtxt").textContent =
+    `층별 입체 (${insts.length.toLocaleString()}개 층)` + (campOn ? " · 캠퍼스 5 m 칸" : "");
+  scene.requestRender();
+}
+function clearBoxes(){ boxJob++; if (boxPrim){ scene.primitives.remove(boxPrim); boxPrim = null; } }
+
+// ── 캠퍼스 5 m 칸 ─────────────────────────────
+let frameTry = 0;
+function withFrame(cb){
+  if (campFrame) return cb();
+  const tp = viewer.terrainProvider;
+  if (tp instanceof Cesium.EllipsoidTerrainProvider){
+    if (++frameTry < 6){ setTimeout(()=>withFrame(cb), 500); return; }
+    campFrame = Cesium.Transforms.eastNorthUpToFixedFrame(
+      Cesium.Cartesian3.fromDegrees(C.center.lon, C.center.lat, 0));
+    return cb();
+  }
+  Cesium.sampleTerrainMostDetailed(tp, [Cesium.Cartographic.fromDegrees(C.center.lon, C.center.lat)])
+    .then(r=>{
+      const g = (r[0] && r[0].height) || 0;
+      campFrame = Cesium.Transforms.eastNorthUpToFixedFrame(
+        Cesium.Cartesian3.fromDegrees(C.center.lon, C.center.lat, g));
+      cb();
     });
+}
+
+function buildCampus(){
+  if (!C) return;
+  if (campPrim){ scene.primitives.remove(campPrim); campPrim = null; }
+  if (!campOn){ scene.requestRender(); return; }
+  withFrame(()=>{
+    if (campPrim){ scene.primitives.remove(campPrim); campPrim = null; }
+    const {nx, ny, nz, nd, dx} = C, sc = C.scales, s = uref / C.base;
+    const ds = allDir ? [...Array(nd).keys()] : [dirIdx];
+    const geom = Cesium.BoxGeometry.fromDimensions({
+      vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
+      dimensions: new Cesium.Cartesian3(dx*0.94, dx*0.94, dx*0.94)});
+    const insts = []; const cnt = [0,0,0];
+    for (let z=0; z<nz; z++){
+      if (!zSel[z]) continue;
+      for (let y=0; y<ny; y++) for (let x=0; x<nx; x++){
+        const oi = (z*ny+y)*nx+x;
+        const off = new Cesium.Cartesian3((x-(nx-1)/2)*dx, (y-(ny-1)/2)*dx, (z+0.5)*dx);
+        if (CV.o[oi]){
+          if (!showBld) continue;
+          insts.push(new Cesium.GeometryInstance({ geometry: geom,
+            modelMatrix: Cesium.Matrix4.multiplyByTranslation(campFrame, off, new Cesium.Matrix4()),
+            id:{camp:true, bld:true, z},
+            attributes:{ color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+              Cesium.Color.fromBytes(120,124,130,235)) }}));
+          continue;
+        }
+        let r=0, u=0, sw=0, sh=0;
+        for (const d of ds){
+          const k = ((d*nz+z)*ny+y)*nx+x;
+          const uu = CV.u[k]*sc.wind_speed*s, ss = CV.s[k]*sc.sigma_w*s, hh = CV.h[k]*sc.shear*s;
+          const rr = classify(uu, ss, hh);
+          if (rr > r) r = rr;
+          u = Math.max(u, uu); sw = Math.max(sw, ss); sh = Math.max(sh, hh);
+        }
+        cnt[r]++;
+        if (mode==="risk" && r===0 && !showGo) continue;
+        insts.push(new Cesium.GeometryInstance({ geometry: geom,
+          modelMatrix: Cesium.Matrix4.multiplyByTranslation(campFrame, off, new Cesium.Matrix4()),
+          id:{camp:true, z, r, u, sw, sh},
+          attributes:{ color: Cesium.ColorGeometryInstanceAttribute.fromColor(toColor(rgba(r,u,sw,sh))) }}));
+      }
+    }
+    campStat = cnt;
+    if (insts.length){
+      campPrim = scene.primitives.add(new Cesium.Primitive({
+        geometryInstances: insts, asynchronous: false,
+        appearance: new Cesium.PerInstanceColorAppearance({translucent:true, closed:true})}));
+    }
+    scene.requestRender();
   });
-  document.getElementById("mtxt").textContent = `입체 (${use.length}개)`;
 }
 
 // ── LOD 전환 ──────────────────────────────────
-let lodTimer = null;
+let lodTimer = null, lastBox = null;
+function movedFar(){
+  const c = scene.camera.positionCartographic;
+  if (!lastBox) return true;
+  const d = Math.hypot(c.longitude-lastBox.lo, c.latitude-lastBox.la) * 6371000;
+  return d > Math.max(300, c.height*0.3) || Math.abs(c.height-lastBox.h) > lastBox.h*0.35;
+}
 function checkLOD(){
   if (!D) return;
   const h = scene.camera.positionCartographic.height;
-  const want = h < LOD_BOX;
-  if (want !== isBox){
-    isBox = want;
+  const wantBox = h < LOD_BOX;
+  const wantCamp = !!campPos && Cesium.Cartesian3.distance(scene.camera.positionWC, campPos) < CAMP_D;
+  if (wantCamp !== campOn){ campOn = wantCamp; paint(); return; }
+  if (wantBox !== isBox){
+    isBox = wantBox;
     pts.show = !isBox;
     if (isBox) rebuildBoxes();
-    else { boxDS.entities.removeAll();
-           document.getElementById("mtxt").textContent = "광역"; }
+    else { clearBoxes(); document.getElementById("mtxt").textContent = "광역"; }
     scene.requestRender();
-  } else if (isBox){
+  } else if (isBox && movedFar()){
     clearTimeout(lodTimer);
     lodTimer = setTimeout(()=>{ rebuildBoxes(); scene.requestRender(); }, 260);
   }
 }
 scene.camera.moveEnd.addEventListener(checkLOD);
-scene.camera.changed.addEventListener(checkLOD);
+
 
 // ── 조작 ──────────────────────────────────────
 const DN = ["북","북동","동","남동","남","남서","서","북서"];
@@ -328,12 +514,40 @@ document.getElementById("cAllD").onchange = e=>{
   document.getElementById("rD").disabled = allDir;
   refresh();
 };
-document.getElementById("rZ").oninput = e=>{
-  zIdx = +e.target.value;
-  document.getElementById("vZ").textContent =
-    zIdx < 0 ? "전체" : ((zIdx+0.5)*D.dz).toFixed(0)+" m";
-  refresh();
+function buildZGrid(){
+  const g = document.getElementById("zg");
+  g.innerHTML = "";
+  for (let z=NZ-1; z>=0; z--){          // 위층이 위에 오도록
+    const b = document.createElement("button");
+    b.textContent = ((z+0.5)*D.dz).toFixed(1);
+    b.title = `${(z*D.dz).toFixed(0)}~${((z+1)*D.dz).toFixed(0)} m 층`;
+    b.onclick = ()=>{ zSel[z] = !zSel[z]; zChanged(); };
+    b.dataset.z = z;
+    g.appendChild(b);
+  }
+  zChanged(false);
+}
+function zChanged(doRefresh=true){
+  if (!zSel.some(v=>v)) zSel = zSel.map(()=>true);   // 하나도 없으면 모두
+  [...document.getElementById("zg").children].forEach(b=>
+    b.className = zSel[+b.dataset.z] ? "on" : "");
+  const n = zSel.filter(v=>v).length;
+  document.getElementById("vZ").textContent = n===NZ ? `${NZ}층 모두` : `${n}개 층`;
+  if (doRefresh) refresh();
+}
+const zSet = f=>{ zSel = zSel.map((_,z)=>f(z)); zChanged(); };
+document.getElementById("zAll").onclick  = ()=>zSet(()=>true);
+document.getElementById("zNone").onclick = ()=>{ zSel = zSel.map(()=>false); zSel[0] = true; zChanged(); };
+document.getElementById("zLow").onclick  = ()=>zSet(z=>(z+1)*D.dz <= 30);
+document.getElementById("zHigh").onclick = ()=>zSet(z=>z*D.dz >= 30);
+document.getElementById("rE").oninput = e=>{
+  exag = +e.target.value;
+  document.getElementById("vE").textContent = "× "+exag;
+  if (isBox){ rebuildBoxes(); scene.requestRender(); }
 };
+document.getElementById("cGo").onchange = e=>{ showGo = e.target.checked; paint(); };
+document.getElementById("cOsm").onchange = e=>{ if (osm){ osm.show = e.target.checked; scene.requestRender(); } };
+document.getElementById("cBld").onchange = e=>{ showBld = e.target.checked; paint(); };
 document.getElementById("segM").onclick = e=>{
   if (e.target.tagName!=="BUTTON") return;
   mode = e.target.dataset.m;
@@ -343,29 +557,52 @@ document.getElementById("segM").onclick = e=>{
 };
 
 // ── 클릭 ──────────────────────────────────────
+const dot = r => `<span class="dot" style="background:rgb(${RISK_C[r].join(",")})"></span>${RISK_N[r]}`;
+const onset = v => v >= 99 ? "–" : v.toFixed(1);
+
 new Cesium.ScreenSpaceEventHandler(scene.canvas).setInputAction(c=>{
   const k = scene.pick(c.position);
   if (!Cesium.defined(k)) return;
+
+  // 캠퍼스 칸
+  if (k.id && k.id.camp){
+    const q = k.id;
+    document.getElementById("pt").textContent = `캠퍼스 칸 · 높이 ${hLab(q.z)}`;
+    document.getElementById("pb").innerHTML = q.bld
+      ? `<tr><td>건물 칸</td><td class="r"></td></tr>`
+      : `<tr><td>기준풍속</td><td class="r">${uref.toFixed(1)} m/s</td></tr>
+         <tr><td>등급</td><td class="r">${dot(q.r)}</td></tr>
+         <tr><td>수평풍속</td><td class="r">${q.u.toFixed(1)} m/s</td></tr>
+         <tr><td>σw</td><td class="r">${q.sw.toFixed(2)} m/s</td></tr>
+         <tr><td>윈드시어 (15 m)</td><td class="r">${q.sh.toFixed(1)} m/s</td></tr>
+         <tr><td>보조 수평 돌풍</td><td class="r">${(q.u + TH.gust_k*q.sw).toFixed(1)} m/s</td></tr>`;
+    document.getElementById("pop").style.display = "block";
+    return;
+  }
+
   let i = null;
   if (k.id && k.id.idx !== undefined) i = k.id.idx;
   else if (k.id && k.id.properties && k.id.properties.idx)
     i = k.id.properties.idx.getValue();
   if (i === null || i === undefined) return;
 
-  const p = D.p[i], s = uref/D.base;
-  document.getElementById("pt").textContent = `패치 ${p.i}`;
-  let h = `<tr><td>좌표</td><td>${p.a.toFixed(4)}, ${p.o.toFixed(4)}</td></tr>
-           <tr><td>기준풍속</td><td>${uref.toFixed(1)} m/s</td></tr>
-           <tr><td colspan=2 style="padding-top:8px;color:#8ab4f8">풍향별 풍속 / 돌풍</td></tr>`;
-  D.dirs.forEach((dd,j)=>{
-    const um = Math.max(...p.ux[j])*s, wg = Math.max(...p.wg[j])*s;
-    h += `<tr><td>${dd}° ${DN[j]}</td><td>${um.toFixed(1)} / ${wg.toFixed(1)}</td></tr>`;
-  });
-  h += `<tr><td colspan=2 style="padding-top:8px;color:#8ab4f8">고도별 최대 풍속</td></tr>`;
-  for (let z=0; z<D.nz; z++){
-    const v = Math.max(...p.ux.map(r=>r[z]))*s;
-    h += `<tr><td>${((z+0.5)*D.dz).toFixed(0)} m</td><td>${v.toFixed(1)} m/s</td></tr>`;
+  const p = D.p[i];
+  const ds = allDir ? [...Array(D.dirs.length).keys()] : [dirIdx];
+  document.getElementById("pt").textContent = `구역 ${p.i}`;
+  let h = `<tr><td>좌표</td><td class="r">${p.a.toFixed(4)}, ${p.o.toFixed(4)}</td></tr>
+           <tr><td>기준풍속 · 풍향</td><td class="r">${uref.toFixed(1)} m/s · ${allDir ? "전 풍향 최악" : D.dirs[dirIdx]+"°"}</td></tr>
+           </table><table style="margin-top:9px">
+           <tr><th>높이</th><th>등급</th><th>풍속</th><th>σw</th><th>시어</th><th>주의/불가 시작</th></tr>`;
+  for (let z=NZ-1; z>=0; z--){
+    const kk = i*NZ+z;
+    if (LR[kk] === 255){ h += `<tr><td>${hLab(z)}</td><td class="r" colspan=5>건물</td></tr>`; continue; }
+    const cu = Math.min(...ds.map(d=>p.cu[d][z])), nu = Math.min(...ds.map(d=>p.nu[d][z]));
+    h += `<tr><td>${hLab(z)}</td><td class="r">${dot(LR[kk])}</td>
+          <td class="r">${LU[kk].toFixed(1)}</td><td class="r">${LS[kk].toFixed(2)}</td>
+          <td class="r">${LH[kk].toFixed(1)}</td><td class="r">${onset(cu)} / ${onset(nu)}</td></tr>`;
   }
+  h += `<tr><td colspan=6 style="padding-top:8px;color:#80868b;font-size:10px">
+        값은 층 안의 최댓값 [m/s]. 시작 풍속은 그 층이 주의·불가가 되는 기준풍속.</td></tr>`;
   document.getElementById("pb").innerHTML = h;
   document.getElementById("pop").style.display = "block";
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);

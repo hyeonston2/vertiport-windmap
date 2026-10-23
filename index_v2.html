@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>버티포트 바람 위험지도 — 경기도</title>
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Cesium.js"></script>
+<link href="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<style>
+  html,body,#cesium{margin:0;padding:0;width:100%;height:100%;overflow:hidden;
+    font-family:-apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+  #panel{position:absolute;top:12px;left:12px;width:296px;padding:16px 18px;
+    background:rgba(18,20,24,.9);color:#e8eaed;border-radius:11px;
+    backdrop-filter:blur(10px);font-size:13px;line-height:1.5;z-index:10;
+    max-height:calc(100vh - 24px);overflow-y:auto}
+  #panel h1{margin:0 0 3px;font-size:15px;font-weight:650}
+  #panel .sub{color:#9aa0a6;font-size:11px;margin-bottom:16px}
+  .row{margin:15px 0}
+  .row label{display:block;font-size:11px;color:#9aa0a6;margin-bottom:6px;
+    letter-spacing:.03em;text-transform:uppercase}
+  .row .val{float:right;color:#8ab4f8;font-variant-numeric:tabular-nums;
+    text-transform:none;font-size:12px;font-weight:600}
+  input[type=range]{width:100%;accent-color:#8ab4f8;margin:0}
+  .seg{display:flex;gap:4px}
+  .seg button{flex:1;padding:6px 0;font-size:11.5px;border:1px solid #3c4043;
+    background:#26282c;color:#e8eaed;border-radius:6px;cursor:pointer}
+  .seg button.on{background:#8ab4f8;color:#17181a;border-color:#8ab4f8;font-weight:650}
+  .chk{display:flex;align-items:center;gap:7px;font-size:12px;color:#bdc1c6;
+    margin-top:9px;cursor:pointer}
+  #legend{margin-top:15px;padding-top:13px;border-top:1px solid #35383c}
+  #legend .t{font-size:10.5px;color:#9aa0a6;margin-bottom:7px}
+  #legend div.i{display:flex;align-items:center;gap:7px;margin:3px 0;font-size:11.5px}
+  .sw{width:14px;height:11px;border-radius:2px;flex:none}
+  #stat{margin-top:14px;padding-top:12px;border-top:1px solid #35383c;
+    font-size:11.5px;color:#9aa0a6}
+  #stat b{color:#e8eaed}
+  #stat .big{font-size:19px;color:#8ab4f8;font-weight:650;
+    font-variant-numeric:tabular-nums}
+  .note{font-size:10px;color:#5f6368;margin-top:13px;line-height:1.45}
+  #mode{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);
+    padding:7px 15px;background:rgba(18,20,24,.85);color:#9aa0a6;
+    border-radius:18px;font-size:11.5px;z-index:10}
+  #mode b{color:#8ab4f8}
+  #loading{position:absolute;inset:0;display:flex;flex-direction:column;
+    gap:11px;align-items:center;justify-content:center;background:#0c0d0f;
+    color:#8ab4f8;font-size:14px;z-index:100}
+  #pop{position:absolute;top:12px;right:12px;width:250px;padding:14px 16px;
+    background:rgba(18,20,24,.92);color:#e8eaed;border-radius:11px;
+    font-size:12px;z-index:10;display:none;backdrop-filter:blur(10px);
+    max-height:calc(100vh - 24px);overflow-y:auto}
+  #pop h3{margin:0 0 9px;font-size:13px;font-weight:650}
+  #pop table{width:100%;border-collapse:collapse;font-size:11px}
+  #pop td{padding:2.5px 0;color:#bdc1c6}
+  #pop td:last-child{text-align:right;color:#e8eaed;font-variant-numeric:tabular-nums}
+  #pop .x{position:absolute;top:9px;right:12px;cursor:pointer;color:#9aa0a6}
+</style>
+</head>
+<body>
+<div id="cesium"></div>
+<div id="loading"><div>데이터 불러오는 중…</div>
+  <div id="lprog" style="font-size:11px;color:#5f6368"></div></div>
+
+<div id="panel">
+  <h1>버티포트 바람 위험지도</h1>
+  <div class="sub">경기도 · CFD 학습 대리모델 · 5 m 격자</div>
+
+  <div class="row">
+    <label>기준풍속 <span class="val" id="vU">6.0 m/s</span></label>
+    <input type="range" id="rU" min="1" max="15" step="0.5" value="6">
+  </div>
+
+  <div class="row">
+    <label>풍향 <span class="val" id="vD">0° (북)</span></label>
+    <input type="range" id="rD" min="0" max="7" step="1" value="0" disabled>
+    <label class="chk"><input type="checkbox" id="cAllD" checked>
+      전 풍향 최악값 사용</label>
+  </div>
+
+  <div class="row">
+    <label>고도 <span class="val" id="vZ">전체</span></label>
+    <input type="range" id="rZ" min="-1" max="11" step="1" value="-1">
+  </div>
+
+  <div class="row">
+    <label>표시 지표</label>
+    <div class="seg" id="segM">
+      <button data-m="risk" class="on">위험등급</button>
+      <button data-m="u">풍속</button>
+      <button data-m="g">돌풍</button>
+    </div>
+  </div>
+
+  <div id="legend"></div>
+  <div id="stat"></div>
+  <div class="note">
+    RANS 학습 3D U-Net 예측. 중립 대기안정도, LOD1 형상.
+    임계값은 NASA/AvMet UAM 기준.
+    돌풍은 peak factor 3.0 적용 추정값.
+  </div>
+</div>
+
+<div id="pop"><span class="x" onclick="document.getElementById('pop').style.display='none'">✕</span>
+  <h3 id="pt"></h3><table id="pb"></table></div>
+
+<div id="mode">시점 <b id="mtxt">광역</b> · 확대하면 입체로 전환</div>
+
+<script>
+Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6ImJ3Y205NGNodW9aTmdXMWwiLCJqdGkiOiI1YWRiOGJkMS1kZjhkLTRlMzEtODZkYy1mMmU5YTE2ODQ1MTEiLCJpZCI6MjQ5Mzk0LCJzdWIiOiJoeWVvbnNlb2siLCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoidmVydGlwb3J0LXdlYiIsImlhdCI6MTc4NzgxOTA1Mn0.d67bBhylYb9Y1imdjfZBbiUyk5JrW59AiF1lSALyX1k";
+
+const viewer = new Cesium.Viewer("cesium", {
+  terrain: Cesium.Terrain.fromWorldTerrain(),
+  baseLayerPicker:false, geocoder:false, homeButton:false, sceneModePicker:false,
+  navigationHelpButton:false, animation:false, timeline:false,
+  infoBox:false, selectionIndicator:false, fullscreenButton:false,
+  requestRenderMode:true, maximumRenderTimeChange:Infinity
+});
+const scene = viewer.scene;
+scene.globe.depthTestAgainstTerrain = true;
+
+// ── 상수 ──────────────────────────────────────
+let TH = {u_green:7.72, u_yellow:12.86, w_green:4.0, w_yellow:6.0, gust_red:18.0};
+const PF_U = 1.25;
+const RISK_C = [[46,125,50],[249,168,37],[198,40,40]];
+const U_TBL = [[26,35,126],[21,101,192],[38,198,218],[255,213,79],[251,140,0],[198,40,40]];
+const G_TBL = [[13,71,161],[2,136,209],[77,208,225],[255,235,59],[245,124,0],[183,28,28]];
+
+// LOD 전환 고도 [m]
+const LOD_BOX = 25000;    // 이보다 가까우면 박스
+const BOX_MAX = 4000;     // 박스로 그릴 최대 개수
+
+function ramp(v, lo, hi, tbl){
+  const t = Math.max(0, Math.min(1, (v-lo)/(hi-lo)));
+  const n = tbl.length-1, i = Math.min(n-1, Math.floor(t*n)), f = t*n-i;
+  const a = tbl[i], b = tbl[i+1];
+  return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f];
+}
+
+// ── 상태 ──────────────────────────────────────
+let D=null, uref=6, dirIdx=0, allDir=true, zIdx=-1, mode="risk";
+let pts=null, posArr=null, boxCol=null, boxDS=null, isBox=false;
+let cache=null;   // Float32Array [risk, um, wg] x N
+
+// ── 로드 ──────────────────────────────────────
+fetch("gg_raw.json").then(r=>r.json()).then(d=>{
+  D = d;
+  if (d.thresholds) TH = d.thresholds;
+  uref = d.base;
+  document.getElementById("rU").value = d.base;
+  document.getElementById("rD").max = d.dirs.length-1;
+  document.getElementById("rZ").max = d.nz-1;
+  document.getElementById("lprog").textContent =
+    `${d.p.length.toLocaleString()} 패치 준비 중…`;
+
+  setTimeout(()=>{
+    buildPoints();
+    boxDS = new Cesium.CustomDataSource("box");
+    viewer.dataSources.add(boxDS);
+    compute(); paint();
+    document.getElementById("loading").style.display="none";
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(127.15, 36.95, 145000),
+      orientation:{heading:0, pitch:Cesium.Math.toRadians(-60), roll:0}});
+  }, 30);
+}).catch(e=>{
+  document.getElementById("loading").innerHTML =
+    "데이터를 불러오지 못했습니다<br><span style='font-size:11px;color:#5f6368'>"+e+"</span>";
+});
+
+// ── 포인트 프리미티브 (광역, 빠름) ────────────
+function buildPoints(){
+  pts = scene.primitives.add(new Cesium.PointPrimitiveCollection({blendOption:
+        Cesium.BlendOption.OPAQUE_AND_TRANSLUCENT}));
+  posArr = new Array(D.p.length);
+  D.p.forEach((p,i)=>{
+    posArr[i] = Cesium.Cartesian3.fromDegrees(p.o, p.a, 30);
+    pts.add({ position: posArr[i], pixelSize: 5,
+              color: Cesium.Color.GRAY, id:{idx:i} });
+  });
+  cache = new Float32Array(D.p.length * 3);
+}
+
+// ── 값 계산 (조작 시 1회) ─────────────────────
+function compute(){
+  const s = uref / D.base;
+  const nd = D.dirs.length;
+  const ds = allDir ? [...Array(nd).keys()] : [dirIdx];
+  const zs = zIdx < 0 ? [...Array(D.nz).keys()] : [zIdx];
+  for (let i=0; i<D.p.length; i++){
+    const p = D.p[i];
+    let umMax=0, wgMax=0, risk=0;
+    for (const d of ds) for (const z of zs){
+      const um = p.ux[d][z]*s, wg = p.wg[d][z]*s;
+      let r = 0;
+      if (um > TH.u_green  || wg > TH.w_green ) r = 1;
+      if (um > TH.u_yellow || wg > TH.w_yellow || um*PF_U > TH.gust_red) r = 2;
+      if (r > risk) risk = r;
+      if (um > umMax) umMax = um;
+      if (wg > wgMax) wgMax = wg;
+    }
+    cache[i*3] = risk; cache[i*3+1] = umMax; cache[i*3+2] = wgMax;
+  }
+}
+
+function colorOf(i){
+  const r = cache[i*3], um = cache[i*3+1], wg = cache[i*3+2];
+  if (mode==="risk"){
+    const c = RISK_C[r];
+    return [c[0], c[1], c[2], r===0 ? 0.45 : (r===1 ? 0.75 : 0.92)];
+  }
+  const c = mode==="u" ? ramp(um,0,20,U_TBL) : ramp(wg,0,12,G_TBL);
+  return [c[0], c[1], c[2], 0.85];
+}
+
+// ── 색칠 + 통계 ───────────────────────────────
+function paint(){
+  let c0=0,c1=0,c2=0,umx=0,gmx=0;
+  for (let i=0; i<D.p.length; i++){
+    const [r,g,b,a] = colorOf(i);
+    pts.get(i).color = Cesium.Color.fromBytes(r|0, g|0, b|0, (a*255)|0);
+    const rk = cache[i*3];
+    if (rk===0) c0++; else if (rk===1) c1++; else c2++;
+    if (cache[i*3+1] > umx) umx = cache[i*3+1];
+    if (cache[i*3+2] > gmx) gmx = cache[i*3+2];
+  }
+  if (isBox) rebuildBoxes();
+
+  const tot = D.p.length;
+  document.getElementById("stat").innerHTML =
+    `<div class="big">${(c0/tot*100).toFixed(1)}%</div>
+     <div style="margin-bottom:8px">운항 가능 지역</div>
+     <b>go</b> ${c0.toLocaleString()} &nbsp;
+     <b>caution</b> ${c1.toLocaleString()} &nbsp;
+     <b>no-go</b> ${c2.toLocaleString()}<br>
+     최대 풍속 <b>${umx.toFixed(1)}</b> m/s &nbsp;
+     최대 돌풍 <b>${gmx.toFixed(1)}</b> m/s`;
+  legend();
+  scene.requestRender();
+}
+
+function legend(){
+  const lg = document.getElementById("legend");
+  if (mode==="risk"){
+    lg.innerHTML = `<div class="t">운항 판정 (NASA/AvMet)</div>` +
+      [["go", `풍속 &lt; ${TH.u_green} · 돌풍 &lt; ${TH.w_green}`],
+       ["caution", `${TH.u_green}~${TH.u_yellow} · ${TH.w_green}~${TH.w_yellow}`],
+       ["no-go", `&gt; ${TH.u_yellow} · &gt; ${TH.w_yellow}`]]
+      .map((x,i)=>`<div class="i"><span class="sw" style="background:rgb(${RISK_C[i].join(",")})"></span>
+        <span><b style="color:#e8eaed">${x[0]}</b>
+        <span style="color:#80868b;font-size:10.5px">${x[1]}</span></span></div>`).join("");
+  } else {
+    const hi = mode==="u" ? 20 : 12, tbl = mode==="u" ? U_TBL : G_TBL;
+    lg.innerHTML = `<div class="t">${mode==="u"?"최대 수평풍속":"최대 수직돌풍"} [m/s]</div>` +
+      tbl.map((c,i)=>`<div class="i"><span class="sw" style="background:rgb(${c.join(",")})"></span>
+        ${(i*hi/(tbl.length-1)).toFixed(0)}</div>`).join("");
+  }
+}
+
+// ── 박스 (근접, 입체) ─────────────────────────
+function rebuildBoxes(){
+  boxDS.entities.removeAll();
+  const cc = viewer.camera.positionCartographic;
+  const clo = Cesium.Math.toDegrees(cc.longitude);
+  const cla = Cesium.Math.toDegrees(cc.latitude);
+  const rad = Math.max(0.004, Math.min(0.35, cc.height / 1000 * 0.012));
+  const cand = [];
+  for (let i=0; i<D.p.length; i++){
+    const p = D.p[i];
+    if (Math.abs(p.o-clo) < rad*1.3 && Math.abs(p.a-cla) < rad){
+      cand.push([Math.hypot(p.o-clo, p.a-cla), i]);
+    }
+  }
+  cand.sort((a,b)=>a[0]-b[0]);
+  const use = cand.slice(0, BOX_MAX);
+  const h  = zIdx < 0 ? D.nz*D.dz : D.dz;
+  const zc = zIdx < 0 ? h/2 : (zIdx+0.5)*D.dz;
+  use.forEach(([,i])=>{
+    const p = D.p[i];
+    const [r,g,b,a] = colorOf(i);
+    boxDS.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(p.o, p.a, zc),
+      box:{ dimensions:new Cesium.Cartesian3(D.patch, D.patch, h),
+            material: Cesium.Color.fromBytes(r|0,g|0,b|0,(a*255)|0),
+            outline:false,
+            heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND },
+      properties:{ idx:i }
+    });
+  });
+  document.getElementById("mtxt").textContent = `입체 (${use.length}개)`;
+}
+
+// ── LOD 전환 ──────────────────────────────────
+let lodTimer = null;
+function checkLOD(){
+  if (!D) return;
+  const h = scene.camera.positionCartographic.height;
+  const want = h < LOD_BOX;
+  if (want !== isBox){
+    isBox = want;
+    pts.show = !isBox;
+    if (isBox) rebuildBoxes();
+    else { boxDS.entities.removeAll();
+           document.getElementById("mtxt").textContent = "광역"; }
+    scene.requestRender();
+  } else if (isBox){
+    clearTimeout(lodTimer);
+    lodTimer = setTimeout(()=>{ rebuildBoxes(); scene.requestRender(); }, 260);
+  }
+}
+scene.camera.moveEnd.addEventListener(checkLOD);
+scene.camera.changed.addEventListener(checkLOD);
+
+// ── 조작 ──────────────────────────────────────
+const DN = ["북","북동","동","남동","남","남서","서","북서"];
+function refresh(){ compute(); paint(); }
+
+document.getElementById("rU").oninput = e=>{
+  uref = +e.target.value;
+  document.getElementById("vU").textContent = uref.toFixed(1)+" m/s";
+  refresh();
+};
+document.getElementById("rD").oninput = e=>{
+  dirIdx = +e.target.value;
+  document.getElementById("vD").textContent = D.dirs[dirIdx]+"° ("+DN[dirIdx]+")";
+  if (!allDir) refresh();
+};
+document.getElementById("cAllD").onchange = e=>{
+  allDir = e.target.checked;
+  document.getElementById("rD").disabled = allDir;
+  refresh();
+};
+document.getElementById("rZ").oninput = e=>{
+  zIdx = +e.target.value;
+  document.getElementById("vZ").textContent =
+    zIdx < 0 ? "전체" : ((zIdx+0.5)*D.dz).toFixed(0)+" m";
+  refresh();
+};
+document.getElementById("segM").onclick = e=>{
+  if (e.target.tagName!=="BUTTON") return;
+  mode = e.target.dataset.m;
+  [...e.currentTarget.children].forEach(b=>b.className="");
+  e.target.className = "on";
+  paint();
+};
+
+// ── 클릭 ──────────────────────────────────────
+new Cesium.ScreenSpaceEventHandler(scene.canvas).setInputAction(c=>{
+  const k = scene.pick(c.position);
+  if (!Cesium.defined(k)) return;
+  let i = null;
+  if (k.id && k.id.idx !== undefined) i = k.id.idx;
+  else if (k.id && k.id.properties && k.id.properties.idx)
+    i = k.id.properties.idx.getValue();
+  if (i === null || i === undefined) return;
+
+  const p = D.p[i], s = uref/D.base;
+  document.getElementById("pt").textContent = `패치 ${p.i}`;
+  let h = `<tr><td>좌표</td><td>${p.a.toFixed(4)}, ${p.o.toFixed(4)}</td></tr>
+           <tr><td>기준풍속</td><td>${uref.toFixed(1)} m/s</td></tr>
+           <tr><td colspan=2 style="padding-top:8px;color:#8ab4f8">풍향별 풍속 / 돌풍</td></tr>`;
+  D.dirs.forEach((dd,j)=>{
+    const um = Math.max(...p.ux[j])*s, wg = Math.max(...p.wg[j])*s;
+    h += `<tr><td>${dd}° ${DN[j]}</td><td>${um.toFixed(1)} / ${wg.toFixed(1)}</td></tr>`;
+  });
+  h += `<tr><td colspan=2 style="padding-top:8px;color:#8ab4f8">고도별 최대 풍속</td></tr>`;
+  for (let z=0; z<D.nz; z++){
+    const v = Math.max(...p.ux.map(r=>r[z]))*s;
+    h += `<tr><td>${((z+0.5)*D.dz).toFixed(0)} m</td><td>${v.toFixed(1)} m/s</td></tr>`;
+  }
+  document.getElementById("pb").innerHTML = h;
+  document.getElementById("pop").style.display = "block";
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+</script>
+</body>
+</html>
